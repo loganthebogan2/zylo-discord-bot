@@ -260,7 +260,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setURL("https://discord.gg/exposedleaks")
+          .setURL("https://discord.gg/zylohub")
           .setLabel("Pay (Invite)")
           .setStyle(ButtonStyle.Link)
       );
@@ -283,4 +283,5 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 process.on("unhandledRejection", console.error);
+
 client.login(process.env.TOKEN);
