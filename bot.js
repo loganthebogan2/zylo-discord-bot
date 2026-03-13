@@ -233,7 +233,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const isAdmin = interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) ?? false;
+    const isAdmin =
+      interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator) ||
+      interaction.user.id === process.env.OWNER_ID;
 
     // /sendverify
     if (interaction.commandName === "sendverify") {
@@ -429,4 +431,5 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 process.on("unhandledRejection", console.error);
 client.login(process.env.TOKEN);
+
 
