@@ -19,9 +19,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-const ADMIN_ROLE_ID = "1478771049624633434";
-const VERIFIED_ROLE_ID = "1478770896385609861";
-const VERIFY_LOG_CHANNEL_ID = "1477917049039622164";
+const ADMIN_ROLE_ID = "1465331390085074955";
 
 const IDS_FILE = path.join(__dirname, "discord_ids.txt");
 const BLACKLIST_FILE = path.join(__dirname, "blacklist.json");
@@ -153,88 +151,13 @@ client.once(Events.ClientReady, async () => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    // ---------- BUTTON VERIFY ----------
-    if (interaction.isButton()) {
-      if (interaction.customId !== "verify_now") return;
-
-      if (!interaction.inGuild()) {
-        return interaction.reply({
-          content: "❌ This button only works inside a server.",
-          ephemeral: true,
-        });
-      }
-
-      const guild = interaction.guild;
-      const member = interaction.member;
-      const botMember = guild.members.me;
-      const role = guild.roles.cache.get(VERIFIED_ROLE_ID);
-
-      if (!role) {
-        return interaction.reply({
-          content: "❌ Verified role not found. Check VERIFIED_ROLE_ID.",
-          ephemeral: true,
-        });
-      }
-
-      if (!botMember) {
-        return interaction.reply({
-          content: "❌ Could not find the bot member in this server.",
-          ephemeral: true,
-        });
-      }
-
-      if (!botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
-        return interaction.reply({
-          content: "❌ Bot is missing Manage Roles permission.",
-          ephemeral: true,
-        });
-      }
-
-      if (role.position >= botMember.roles.highest.position) {
-        return interaction.reply({
-          content: "❌ Move the bot role above the Verified role.",
-          ephemeral: true,
-        });
-      }
-
-      if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
-        return interaction.reply({
-          content: "✅ You are already verified.",
-          ephemeral: true,
-        });
-      }
-
-      await member.roles.add(role.id);
-
-      if (VERIFY_LOG_CHANNEL_ID) {
-        const logChannel = guild.channels.cache.get(VERIFY_LOG_CHANNEL_ID);
-        if (logChannel && logChannel.isTextBased()) {
-          const logEmbed = new EmbedBuilder()
-            .setTitle("User Verified")
-            .addFields(
-              { name: "User", value: `${interaction.user.tag}`, inline: true },
-              { name: "User ID", value: interaction.user.id, inline: true },
-              { name: "Role Given", value: `<@&${VERIFIED_ROLE_ID}>`, inline: true }
-            )
-            .setColor(0x57f287)
-            .setTimestamp();
-
-          await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
-        }
-      }
-
-      return interaction.reply({
-        content: "✅ You have been verified.",
-        ephemeral: true,
-      });
-    }
-
     if (!interaction.isChatInputCommand()) return;
 
     await interaction.deferReply({ ephemeral: true });
 
     const isAdmin =
       interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator) ||
+      interaction.member?.roles?.cache?.has?.(ADMIN_ROLE_ID) ||
       interaction.user.id === process.env.OWNER_ID;
 
     // /sendverify
@@ -267,18 +190,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
         );
       }
 
+      if (!process.env.VERIFY_WEB_URL) {
+        return interaction.editReply("❌ VERIFY_WEB_URL is missing in Railway variables.");
+      }
+
       const embed = new EmbedBuilder()
         .setTitle("Verification required")
-        .setDescription("Press the button below to verify and access the server.")
+        .setDescription(
+          "Press the button below to verify your Discord account and access the server."
+        )
         .setColor(0x5865f2)
-        .setFooter({ text: "Safe verification" })
+        .setFooter({ text: "Secure OAuth verification" })
         .setTimestamp();
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId("verify_now")
           .setLabel("Verify now")
-          .setStyle(ButtonStyle.Primary)
+          .setStyle(ButtonStyle.Link)
+          .setURL(process.env.VERIFY_WEB_URL)
       );
 
       await channel.send({
@@ -387,8 +316,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setTitle("🧪 SIMULATION NOTICE")
         .setDescription(
           `Hey **${user.username}**!\n\n` +
-          `⚠️ **THIS IS A ATTACK** ⚠️\n` +
-          `Real actions are happening.\n\n` +
+          `⚠️ **THIS IS A SIMULATION** ⚠️\n` +
+          `No real action is happening — this is a test message.\n\n` +
           `Target Label: **${ip}**\n` +
           `Duration: **${safeTime}s**\n` +
           `Method: **${method}**\n\n` +
@@ -406,7 +335,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       try {
         await user.send({ embeds: [embed], components: [row] });
-        return interaction.editReply(`✅ Dm sent to ${user.tag}`);
+        return interaction.editReply(`✅ Simulation DM sent to ${user.tag}`);
       } catch {
         return interaction.editReply("❌ Couldn't DM the user (they might have DMs disabled).");
       }
@@ -431,5 +360,3 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 process.on("unhandledRejection", console.error);
 client.login(process.env.TOKEN);
-
-
