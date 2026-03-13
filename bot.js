@@ -19,7 +19,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-const ADMIN_ROLE_ID = "1465331390085074955";
+const ADMIN_ROLE_ID = "1478771049624633434";
 const VERIFIED_ROLE_ID = "1478770896385609861";
 const VERIFY_LOG_CHANNEL_ID = "1477917049039622164";
 
@@ -429,3 +429,4 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 process.on("unhandledRejection", console.error);
 client.login(process.env.TOKEN);
+
