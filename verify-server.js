@@ -6,6 +6,8 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
 
+console.log("verify-server.js is starting...");
+
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
@@ -187,7 +189,6 @@ async function addVerifiedRole(userId) {
   );
 }
 
-// Basic VPN / proxy / hosting detection using proxycheck.io
 async function isVpnOrProxy(ip) {
   if (!process.env.PROXYCHECK_API_KEY) return { blocked: false, reason: "VPN check disabled" };
 
@@ -236,11 +237,22 @@ function countRecentAttempts(ipHash) {
   return recent.length;
 }
 
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    ok: true,
+    service: "verify-server",
+    port: PORT,
+    time: new Date().toISOString(),
+  });
+});
+
 app.get("/", (req, res) => {
   res.redirect("/verify");
 });
 
 app.get("/verify", (req, res) => {
+  console.log("User opened /verify");
+
   const state = crypto.randomBytes(16).toString("hex");
   req.session.oauthState = state;
 
@@ -273,6 +285,8 @@ app.get("/verify", (req, res) => {
 
 app.get("/callback", async (req, res) => {
   try {
+    console.log("OAuth callback received");
+
     const { code, state } = req.query;
 
     if (!code || !state || state !== req.session.oauthState) {
