@@ -10,6 +10,7 @@ const {
   ButtonStyle,
   PermissionsBitField,
   ChannelType,
+  MessageFlags,
 } = require("discord.js");
 const { REST } = require("@discordjs/rest");
 const { Routes } = require("discord-api-types/v10");
@@ -131,6 +132,7 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 client.once(Events.ClientReady, async () => {
   console.log(`Bot is online as ${client.user.tag}!`);
+  console.log(`VERIFY_WEB_URL: ${process.env.VERIFY_WEB_URL || "missing"}`);
 
   try {
     await rest.put(
@@ -153,68 +155,68 @@ client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (!interaction.isChatInputCommand()) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const isAdmin =
       interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator) ||
       interaction.member?.roles?.cache?.has?.(ADMIN_ROLE_ID) ||
       interaction.user.id === process.env.OWNER_ID;
 
-  // /sendverify
-  if (interaction.commandName === "sendverify") {
-    if (!isAdmin) return interaction.editReply("❌ Admins only.");
-  
-    const channel = interaction.channel;
-    const botMember = interaction.guild.members.me;
-  
-    if (!channel) {
-      return interaction.editReply("❌ Could not find this channel.");
-    }
-  
-    if (
-      channel.type !== ChannelType.GuildText &&
-      channel.type !== ChannelType.GuildAnnouncement
-    ) {
-      return interaction.editReply("❌ Use this in a normal text channel.");
-    }
-  
-    const perms = channel.permissionsFor(botMember);
-    if (
-      !perms ||
-      !perms.has(PermissionsBitField.Flags.ViewChannel) ||
-      !perms.has(PermissionsBitField.Flags.SendMessages) ||
-      !perms.has(PermissionsBitField.Flags.EmbedLinks)
-    ) {
-      return interaction.editReply(
-        "❌ I need View Channel, Send Messages, and Embed Links in this channel."
+    // /sendverify
+    if (interaction.commandName === "sendverify") {
+      if (!isAdmin) return interaction.editReply("❌ Admins only.");
+
+      const channel = interaction.channel;
+      const botMember = interaction.guild.members.me;
+
+      if (!channel) {
+        return interaction.editReply("❌ Could not find this channel.");
+      }
+
+      if (
+        channel.type !== ChannelType.GuildText &&
+        channel.type !== ChannelType.GuildAnnouncement
+      ) {
+        return interaction.editReply("❌ Use this in a normal text channel.");
+      }
+
+      const perms = channel.permissionsFor(botMember);
+      if (
+        !perms ||
+        !perms.has(PermissionsBitField.Flags.ViewChannel) ||
+        !perms.has(PermissionsBitField.Flags.SendMessages) ||
+        !perms.has(PermissionsBitField.Flags.EmbedLinks)
+      ) {
+        return interaction.editReply(
+          "❌ I need View Channel, Send Messages, and Embed Links in this channel."
+        );
+      }
+
+      if (!process.env.VERIFY_WEB_URL) {
+        return interaction.editReply("❌ VERIFY_WEB_URL is missing in Railway variables.");
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle("Verification required")
+        .setDescription("Press the button below to verify and access the server.")
+        .setColor(0x5865f2)
+        .setFooter({ text: "Safe verification" })
+        .setTimestamp();
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel("Verify now")
+          .setStyle(ButtonStyle.Link)
+          .setURL(process.env.VERIFY_WEB_URL)
       );
+
+      await channel.send({
+        embeds: [embed],
+        components: [row],
+      });
+
+      return interaction.editReply("✅ Verification panel sent.");
     }
-  
-    if (!process.env.VERIFY_WEB_URL) {
-      return interaction.editReply("❌ VERIFY_WEB_URL is missing in Railway variables.");
-    }
-  
-    const embed = new EmbedBuilder()
-      .setTitle("Verification required")
-      .setDescription("Press the button below to verify and access the server.")
-      .setColor(0x5865f2)
-      .setFooter({ text: "Safe verification" })
-      .setTimestamp();
-  
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setLabel("Verify now")
-        .setStyle(ButtonStyle.Link)
-        .setURL(process.env.VERIFY_WEB_URL)
-    );
-  
-    await channel.send({
-      embeds: [embed],
-      components: [row],
-    });
-  
-    return interaction.editReply("✅ Verification panel sent.");
-  }
 
     // /blacklist
     if (interaction.commandName === "blacklist") {
@@ -349,7 +351,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       } else {
         return await interaction.reply({
           content: "❌ Error. Check console.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     } catch {}
