@@ -481,6 +481,6 @@ app.get("/callback", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Verify site running on port ${PORT}`);
 });
