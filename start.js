@@ -1,3 +1,4 @@
+console.log("starting launcher build test");
 const { spawn } = require("child_process");
 
 function run(name, file) {
